@@ -166,9 +166,14 @@ prompt_config() {
     [[ "$API_PORT" =~ ^[0-9]+$ ]] || die "Порт API должен быть числом"
 
     # API токен
-    API_TOKEN=""
-    ask "API токен (пустой = без авторизации):"
-    read -r API_TOKEN
+    # Дефолтный токен генерируется автоматически
+    API_TOKEN=$(openssl rand -base64 48 | tr -d '/+=' | head -c 64)
+    ask "API токен [сгенерирован автоматически] (Enter = оставить, или введите свой):"
+    read -r input_token
+    if [[ -n "$input_token" ]]; then
+        API_TOKEN="$input_token"
+    fi
+    log "API токен задан (${#API_TOKEN} символов)"
 
     # Middle proxy
     USE_MIDDLE_PROXY="true"
@@ -260,23 +265,17 @@ services:
     container_name: telemt
     restart: unless-stopped
     network_mode: host
+    user: "0:0"
     environment:
       RUST_LOG: "info"
     volumes:
-      - ./telemt.toml:/etc/telemt.toml:ro
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_BIND_SERVICE
-    read_only: true
+      - ./telemt.toml:/etc/telemt.toml
+      - ./data:/var/lib/telemt
     tmpfs:
-      - /tmp:rw,nosuid,nodev,noexec,size=16m
+      - /tmp:rw,size=16m
     deploy:
       resources:
         limits:
-          cpus: "0.50"
           memory: 256M
     ulimits:
       nofile:
@@ -362,6 +361,7 @@ print_result() {
     echo -e "${BOLD}Домен:${NC}       $TLS_DOMAIN"
     echo -e "${BOLD}Секрет:${NC}      $SECRET"
     echo -e "${BOLD}API:${NC}         http://127.0.0.1:${API_PORT}"
+    echo -e "${BOLD}API токен:${NC}   ${API_TOKEN:0:8}...${API_TOKEN: -4} (полный в server_info.txt)"
     echo -e "${BOLD}Конфиг:${NC}      $CONFIG_FILE"
     echo ""
     echo -e "${BOLD}Ссылка для Telegram:${NC}"
@@ -370,10 +370,11 @@ print_result() {
     echo -e "${BOLD}═══════════════════════════════════════════════${NC}"
     echo -e "${BOLD}Для бота (/telemt_add):${NC}"
     echo ""
-    echo -e "${CYAN}tmt_$(echo "$PUBLIC_IP" | tr '.' '_') Telemt-${TLS_DOMAIN%%.*} http://${PUBLIC_IP}:${API_PORT} $(curl -fsSL --max-time 3 https://ipinfo.io/country 2>/dev/null || echo 'XX')${NC}"
-    if [[ -n "$API_TOKEN" ]]; then
-        echo -e "(с токеном: добавьте 5-м полем: ${API_TOKEN})"
-    fi
+    local country
+    country=$(curl -fsSL --max-time 3 https://ipinfo.io/country 2>/dev/null || echo 'XX')
+    echo -e "${CYAN}tmt_$(echo "$PUBLIC_IP" | tr '.' '_') Telemt-${TLS_DOMAIN%%.*} http://${PUBLIC_IP}:${API_PORT} ${country} ${API_TOKEN}${NC}"
+    echo ""
+    echo -e "${YELLOW}⚠️  Скопируйте строку выше целиком — она содержит API токен${NC}"
     echo ""
     echo -e "${BOLD}═══════════════════════════════════════════════${NC}"
     echo ""
