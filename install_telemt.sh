@@ -281,7 +281,7 @@ services:
     environment:
       RUST_LOG: "info"
     volumes:
-      - ./telemt.toml:/etc/telemt.toml
+      - ./:/etc/telemt
       - ./data:/var/lib/telemt
     tmpfs:
       - /tmp:rw,size=16m
