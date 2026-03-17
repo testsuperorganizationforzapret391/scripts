@@ -208,6 +208,20 @@ prompt_config() {
     read -r input_ips
     [[ -n "$input_ips" ]] && MAX_UNIQUE_IPS="$input_ips"
 
+    # IP бота для whitelist API
+    echo ""
+    echo -e "${CYAN}Whitelist IP для API:${NC}"
+    echo "  Если бот на другом сервере — укажите его IP."
+    echo "  Пустое значение = доступ только с localhost."
+    echo ""
+    API_WHITELIST_IP=""
+    ask "IP сервера бота (Enter = только localhost):"
+    read -r input_wl
+    if [[ -n "$input_wl" ]]; then
+        API_WHITELIST_IP="$input_wl"
+        log "API whitelist: $API_WHITELIST_IP"
+    fi
+
     # Генерация секрета
     SECRET=$(openssl rand -hex 16)
     log "Секрет сгенерирован: $SECRET"
@@ -239,7 +253,7 @@ max_connections = 10000
 [server.api]
 enabled = true
 listen = "0.0.0.0:${API_PORT}"
-whitelist = []
+$(if [[ -n "$API_WHITELIST_IP" ]]; then echo "whitelist = [\"$API_WHITELIST_IP\"]"; else echo "whitelist = []"; fi)
 $([ -n "$API_TOKEN" ] && echo "auth_header = \"$API_TOKEN\"" || echo "# auth_header = \"\"")
 
 [[server.listeners]]
@@ -278,10 +292,11 @@ services:
     restart: unless-stopped
     network_mode: host
     user: "0:0"
+    command: ["--config", "/config/telemt.toml"]
     environment:
       RUST_LOG: "info"
     volumes:
-      - ./:/etc/telemt
+      - ./:/config
       - ./data:/var/lib/telemt
     tmpfs:
       - /tmp:rw,size=16m
