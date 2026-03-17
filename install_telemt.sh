@@ -74,9 +74,21 @@ install_docker() {
     fi
 
     log "Устанавливаю Docker..."
+    # Гарантируем что SSH останется доступен после установки Docker
+    # Docker может менять iptables — сохраняем правило для SSH
+    if command -v iptables &>/dev/null; then
+        iptables -I INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
+    fi
+
     curl -fsSL https://get.docker.com | sh
     systemctl enable docker
     systemctl start docker
+
+    # Повторно гарантируем SSH после Docker (Docker перезаписывает iptables)
+    if command -v iptables &>/dev/null; then
+        iptables -I INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
+    fi
+
     log "Docker установлен: $(docker --version)"
 }
 
@@ -319,9 +331,11 @@ setup_firewall() {
         return
     fi
 
+    # КРИТИЧНО: всегда разрешаем SSH перед любыми изменениями firewall
+    ufw allow 22/tcp comment "SSH" 2>/dev/null || true
     ufw allow "$PROXY_PORT"/tcp comment "Telemt MTProxy" 2>/dev/null || true
     # НЕ открываем API порт наружу — он для локального управления ботом
-    log "Firewall: порт $PROXY_PORT открыт"
+    log "Firewall: SSH (22) и порт $PROXY_PORT открыты"
 }
 
 # ──────────── Проверка здоровья ────────────
